@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"xialoveshark.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"remove","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":false,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="从潜空间分块、adaLN-Zero 和 ImageNet 实验理解 Diffusion Transformer。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="DiT 论文笔记｜用 Transformer 做扩散去噪">
+<meta property="og:url" content="https://xialoveshark.github.io/2026/11/24/dit-paper-notes/index.html">
+<meta property="og:site_name" content="xialoveshark">
+<meta property="og:description" content="从潜空间分块、adaLN-Zero 和 ImageNet 实验理解 Diffusion Transformer。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://xialoveshark.github.io/images/dit-architecture.png">
+<meta property="article:published_time" content="2026-11-24T02:02:00.000Z">
+<meta property="article:modified_time" content="2026-11-24T10:05:26.806Z">
+<meta property="article:author" content="xialoveshark">
+<meta property="article:tag" content="生成模型">
+<meta property="article:tag" content="强化学习">
+<meta property="article:tag" content="多模态">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://xialoveshark.github.io/images/dit-architecture.png">
+
+<link rel="canonical" href="https://xialoveshark.github.io/2026/11/24/dit-paper-notes/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>DiT 论文笔记｜用 Transformer 做扩散去噪 | xialoveshark</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <span class="site-title">xialoveshark</span>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav" aria-label="主导航">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section">首页</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section">标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section">分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section">归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://xialoveshark.github.io/2026/11/24/dit-paper-notes/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="xialoveshark">
+      <meta itemprop="description" content="Hi, this is Lee. I’m documenting my learning notes in this blog since 2026.">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="xialoveshark">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          DiT 论文笔记｜用 Transformer 做扩散去噪
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2026-11-24 10:02:00" itemprop="dateCreated datePublished" datetime="2026-11-24T10:02:00+08:00">2026-11-24</time>
+            </span>
+
+          
+
+          <span class="post-meta-item post-reading-time">约 2 分钟阅读</span>
+            <div class="post-description">从潜空间分块、adaLN-Zero 和 ImageNet 实验理解 Diffusion Transformer。</div>
+
+        </div>
+      </header>
+        <details class="article-toc">
+          <summary>文章目录</summary>
+          <nav aria-label="文章目录"><ol class="article-toc-list"><li class="article-toc-list-item article-toc-list-level-2"><a class="article-toc-list-link" href="#%E4%B8%80%E3%80%81DiT-%E6%8D%A2%E6%8E%89%E4%BA%86%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="article-toc-list-text">一、DiT 换掉了什么？</span></a></li><li class="article-toc-list-item article-toc-list-level-2"><a class="article-toc-list-link" href="#%E4%BA%8C%E3%80%81%E4%BB%8E%E5%B8%A6%E5%99%AA%E6%BD%9C%E5%8F%98%E9%87%8F%E5%88%B0-Transformer-token"><span class="article-toc-list-text">二、从带噪潜变量到 Transformer token</span></a></li><li class="article-toc-list-item article-toc-list-level-2"><a class="article-toc-list-link" href="#%E4%B8%89%E3%80%81adaLN-Zero-%E6%80%8E%E4%B9%88%E6%B3%A8%E5%85%A5%E6%9D%A1%E4%BB%B6%EF%BC%9F"><span class="article-toc-list-text">三、adaLN-Zero 怎么注入条件？</span></a></li><li class="article-toc-list-item article-toc-list-level-2"><a class="article-toc-list-link" href="#%E5%9B%9B%E3%80%81%E6%A8%A1%E5%9E%8B%E5%A4%A7%E5%92%8C-token-%E5%A4%9A%EF%BC%8C%E9%83%BD%E6%98%AF%E6%89%A9%E5%B1%95%E6%89%8B%E6%AE%B5"><span class="article-toc-list-text">四、模型大和 token 多，都是扩展手段</span></a></li></ol></nav>
+        </details>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>把扩散模型的去噪网络换成 Transformer 后，生成质量会怎样随计算量变化？这是 William Peebles 和 Saining Xie 在 ICCV 2023 的《Scalable Diffusion Models with Transformers》里研究的问题。我把论文里的架构设计和实验结论记在这里。<a target="_blank" rel="noopener" href="https://arxiv.org/html/2212.09748v2">论文原文</a></p>
+<h2 id="一、DiT-换掉了什么？"><a href="#一、DiT-换掉了什么？" class="headerlink" title="一、DiT 换掉了什么？"></a>一、DiT 换掉了什么？</h2><p>DiT 保留了潜空间扩散的流程。预训练的 VAE 把图像压缩成潜变量，扩散模型在潜空间里做去噪，采样完成后再用 VAE 解码成图像。论文把这条流程中负责去噪的 U-Net 主干换成了 Transformer。<a target="_blank" rel="noopener" href="https://arxiv.org/html/2212.09748v2#S3">论文第 3 节</a></p>
+<h2 id="二、从带噪潜变量到-Transformer-token"><a href="#二、从带噪潜变量到-Transformer-token" class="headerlink" title="二、从带噪潜变量到 Transformer token"></a>二、从带噪潜变量到 Transformer token</h2><p>对于 256 × 256 的图像，论文使用的 VAE 产生 32 × 32 × 4 的潜变量。DiT 把带噪潜变量切成小块，将每块映射成一个 token，再加入位置编码。沿着图 3 左边从下往上看，可以看到堆叠的 DiT 模块如何处理 token，以及输出层如何把预测的噪声和方差参数还原到空间网格。</p>
+<p><a href="/images/dit-architecture.png"><img src="/images/dit-architecture.png" alt="DiT 原论文图 3，左侧为潜空间扩散 Transformer，右侧为不同条件注入方式的 DiT 模块"></a></p>
+<p><em>图 3 来自 William Peebles 和 Saining Xie 的 <a target="_blank" rel="noopener" href="https://arxiv.org/html/2212.09748v2#S1.F3">DiT 原论文</a>，按 <a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> 转载。</em></p>
+<h2 id="三、adaLN-Zero-怎么注入条件？"><a href="#三、adaLN-Zero-怎么注入条件？" class="headerlink" title="三、adaLN-Zero 怎么注入条件？"></a>三、adaLN-Zero 怎么注入条件？</h2><p>去噪网络需要知道当前扩散时间步和要生成的类别。adaLN-Zero 用这两项的嵌入来生成归一化的缩放、偏移，以及残差分支的缩放系数。初始化时残差分支的缩放系数为零，因此每个模块一开始相当于恒等映射。在论文的消融实验里，adaLN-Zero 的 FID 优于作者比较的其他条件注入方案。<a target="_blank" rel="noopener" href="https://arxiv.org/html/2212.09748v2#S3.SS2">论文第 3.2 节和第 5 节</a></p>
+<h2 id="四、模型大和-token-多，都是扩展手段"><a href="#四、模型大和-token-多，都是扩展手段" class="headerlink" title="四、模型大和 token 多，都是扩展手段"></a>四、模型大和 token 多，都是扩展手段</h2><p>潜空间尺寸固定时，patch 边长减半，token 数量就会变成四倍，Transformer 的计算量也随之增加。论文在 12 种模型配置上观察到，前向计算量较大的配置通常得到更低的 FID。最大的 DiT-XL&#x2F;2 在 256 × 256 的 ImageNet 类别条件生成实验里，使用无分类器引导取得了 2.27 的 FID。<a target="_blank" rel="noopener" href="https://arxiv.org/html/2212.09748v2#S5">论文实验</a></p>
+<p>这组实验让我记住了比较扩散主干时要一起看参数量、输入 token 数和一次前向计算量。即使模型大小接近，换一种分块方式也会显著改变计算成本。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/%E7%94%9F%E6%88%90%E6%A8%A1%E5%9E%8B/" rel="tag"># 生成模型</a>
+              <a href="/tags/%E5%BC%BA%E5%8C%96%E5%AD%A6%E4%B9%A0/" rel="tag"># 强化学习</a>
+              <a href="/tags/%E5%A4%9A%E6%A8%A1%E6%80%81/" rel="tag"># 多模态</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2025/02/07/hello-world/" rel="prev" title="Hello World">
+      <i class="fa fa-chevron-left"></i> Hello World
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2026</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">xialoveshark</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/pjax/pjax.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+  <script>
+var pjax = new Pjax({
+  selectors: [
+    'head title',
+    '#page-configurations',
+    '.content-wrap',
+    '.post-toc-wrap',
+    '.languages',
+    '#pjax'
+  ],
+  switches: {
+    '.post-toc-wrap': Pjax.switches.innerHTML
+  },
+  analytics: false,
+  cacheBust: false,
+  scrollTo : !CONFIG.bookmark.enable
+});
+
+window.addEventListener('pjax:success', () => {
+  document.querySelectorAll('script[data-pjax], script#page-configurations, #pjax script').forEach(element => {
+    var code = element.text || element.textContent || element.innerHTML || '';
+    var parent = element.parentNode;
+    parent.removeChild(element);
+    var script = document.createElement('script');
+    if (element.id) {
+      script.id = element.id;
+    }
+    if (element.className) {
+      script.className = element.className;
+    }
+    if (element.type) {
+      script.type = element.type;
+    }
+    if (element.src) {
+      script.src = element.src;
+      // Force synchronous loading of peripheral JS.
+      script.async = false;
+    }
+    if (element.dataset.pjax !== undefined) {
+      script.dataset.pjax = '';
+    }
+    if (code !== '') {
+      script.appendChild(document.createTextNode(code));
+    }
+    parent.appendChild(script);
+  });
+  NexT.boot.refresh();
+  // Define Motion Sequence & Bootstrap Motion.
+  if (CONFIG.motion.enable) {
+    NexT.motion.integrator
+      .init()
+      .add(NexT.motion.middleWares.subMenu)
+      .add(NexT.motion.middleWares.postList)
+      .bootstrap();
+  }
+  NexT.utils.updateSidebarPosition();
+});
+</script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div id="pjax">
+  
+
+  
+
+    </div>
+</body>
+</html>
